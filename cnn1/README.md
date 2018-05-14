@@ -12,4 +12,4 @@ Data is organized as follows:
       * [class_name_2](./class_name_2)
       * [...](./...)
              
-<br/>Data is in differece size will be reszied the same size
+\Data is in differece size will be reszied the same size
