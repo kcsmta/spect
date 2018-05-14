@@ -1,3 +1,3 @@
 Data is organized as follows:
                             
-Data is in differece size will be reszied th
+<\br>Data is in differece size will be reszied the same size
