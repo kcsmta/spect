@@ -1,33 +1,22 @@
 Data is organized as follows:
 
-~> tree -d /proc/self/
-/proc/self/
-|-- attr
-|-- cwd -> /proc
-|-- fd
-|   `-- 3 -> /proc/15589/fd
-|-- fdinfo
-|-- net
-|   |-- dev_snmp6
-|   |-- netfilter
-|   |-- rpc
-|   |   |-- auth.rpcsec.context
-|   |   |-- auth.rpcsec.init
-|   |   |-- auth.unix.gid
-|   |   |-- auth.unix.ip
-|   |   |-- nfs4.idtoname
-|   |   |-- nfs4.nametoid
-|   |   |-- nfsd.export
-|   |   `-- nfsd.fh
-|   `-- stat
-|-- root -> /
-`-- task
-    `-- 15589
-        |-- attr
-        |-- cwd -> /proc
-        |-- fd
-        | `-- 3 -> /proc/15589/task/15589/fd
-        |-- fdinfo
-        `-- root -> /
+.
++-- _config.yml
++-- _drafts
+|   +-- begin-with-the-crazy-ideas.textile
+|   +-- on-simplicity-in-technology.markdown
++-- _includes
+|   +-- footer.html
+|   +-- header.html
++-- _layouts
+|   +-- default.html
+|   +-- post.html
++-- _posts
+|   +-- 2007-10-29-why-every-programmer-should-play-nethack.textile
+|   +-- 2009-04-26-barcamp-boston-4-roundup.textile
++-- _data
+|   +-- members.yml
++-- _site
++-- index.html
                             
-Data is in differece size will be reszied t
+Data is in differece size will be reszied th
