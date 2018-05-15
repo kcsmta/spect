@@ -1,6 +1,6 @@
-Requirements:
-      Tensorflow 1.1.0
-      ....
+Requirements:\
+      Tensorflow 1.1.0 \
+      ...\
 Data is organized as follows:
 
 # Data tree
