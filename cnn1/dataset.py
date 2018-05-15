@@ -9,10 +9,10 @@ def load_train(train_path, image_size, classes):
     labels = []
     ids = []
     cls = []
-    print('------------------------')
     print('Reading training images')
     for fld in classes:   # assuming data directory has a separate folder for each class, and that each folder is named after the class
         index = classes.index(fld)
+        print('----------------------------------')
         print('Loading {} files (Index: {})'.format(fld, index))
         path = os.path.join(train_path, fld, '*.jpg')
         files = glob.glob(path)
