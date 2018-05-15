@@ -1,124 +1,305 @@
+import matplotlib.pyplot as plt
 import tensorflow as tf
-import cv2
+import pandas as pd
 import numpy as np
-import dataset
+from sklearn.metrics import confusion_matrix
 import time
 from datetime import timedelta
 import math
+import dataset
 import random
+    
+# Convolutional Layer 1.
+filter_size1 = 3 
+num_filters1 = 32
 
-# path to traing data
-train_path = '/home/kcsmta/Desktop/WORKS/SPECT/code/data/data_training'
-MODEL_NAME = 'spect-image-model'
+# Convolutional Layer 2.
+filter_size2 = 3
+num_filters2 = 32
+
+# Convolutional Layer 3.
+filter_size3 = 3
+num_filters3 = 64
+    
+# Fully-connected layer.
+fc_size = 128             # Number of neurons in fully-connected layer.
+
+# Number of color channels for the images: 1 channel for gray-scale.
+num_channels = 3
+
+# image dimensions (only squares for now)
+img_size = 128
+
+# Size of image when flattened to a single dimension
+img_size_flat = img_size * img_size * num_channels
+
+# Tuple with height and width of images used to reshape arrays.
+img_shape = (img_size, img_size)
 
 # class info
-classes = ['0', '1', '2', '3', '4']
+
+classes = ['1', '2', '3', '4', '5']
 num_classes = len(classes)
 
-# size input image
-img_size = 224
-witdh = img_size
-height = img_size
-channels = 3
-
-# Convolution params
-num_conv1_filters = 96
-conv1_kernel_size = 11
-conv1_stride = 4
-
-num_conv2_filters = 256
-conv2_kernel_size = 3
-conv2_stride = 2
-
-num_conv3_filters = 384
-conv3_kernel_size = 3
-conv3_stride = 1
-
-num_conv4_filters = 384
-conv4_kernel_size = 3
-conv4_stride = 1
-
-num_conv5_filters = 256
-conv5_kernel_size = 3
-conv5_stride = 1
-
-num_fully1_nodes = 4096
-num_fully2_nodes = 4096
+# batch size
+batch_size = 16
 
 # validation split
 validation_size = .2
 
-# read training data
-data = dataset.read_train_sets(train_path, img_size, classes, validation_size)
+# number if iterations
+NUM_ITERATIONS = 3000
 
-def create_weights(shape):
-	initializer = tf.contrib.layers.xavier_initializer()
-	return tf.Variable(initializer(shape))
-def create_bias(size):
-	return tf.Variable(tf.constant(0.05,shape=size))
-def convolution_layer(input,num_input_channels,num_filters,kernel_size,kernel_stride,use_pool):
-	weights = create_weights(shape=[kernel_size,kernel_size,num_input_channels,num_filters])
-	bias = create_bias(num_filters)
-	layer = tf.nn.conv2d(input,weights,strides=[1,kernel_stride,kernel_stride,1],padding="SAME")
-	layer += bias
-	layer = tf.nn.relu(layer)
-	if(use_pool == True):
-		layer = tf.nn.max_pool(layer,ksize=[1,3,3,1],strides=[1,2,2,1],padding="VALID")
-	return layer
+# model name
+MODEL_NAME = 'spect-image-model'
 
+train_path='/home/kcsmta/Desktop/WORKS/SPECT/code/data/data_training'
+test_path='/home/kcsmta/Desktop/WORKS/SPECT/code/data/data_testing'
+
+
+data = dataset.read_train_sets(train_path, img_size, classes, validation_size=validation_size)
+
+print("Size of:")
+print("- Training-set:\t\t{}".format(len(data.train.labels)))
+print("- Validation-set:\t{}".format(len(data.valid.labels)))
+
+
+def new_weights(shape):
+    return tf.Variable(tf.truncated_normal(shape, stddev=0.05))
+
+def new_biases(length):
+    return tf.Variable(tf.constant(0.05, shape=[length]))
+
+
+
+def new_conv_layer(input,              # The previous layer.
+               num_input_channels, # Num. channels in prev. layer.
+               filter_size,        # Width and height of each filter.
+               num_filters,        # Number of filters.
+               use_pooling=True):  # Use 2x2 max-pooling.
+
+    # Shape of the filter-weights for the convolution.
+    # This format is determined by the TensorFlow API.
+    shape = [filter_size, filter_size, num_input_channels, num_filters]
+
+    # Create new weights aka. filters with the given shape.
+    weights = new_weights(shape=shape)
+
+    # Create new biases, one for each filter.
+    biases = new_biases(length=num_filters)
+
+    # Create the TensorFlow operation for convolution.
+    # Note the strides are set to 1 in all dimensions.
+    # The first and last stride must always be 1,
+    # because the first is for the image-number and
+    # the last is for the input-channel.
+    # But e.g. strides=[1, 2, 2, 1] would mean that the filter
+    # is moved 2 pixels across the x- and y-axis of the image.
+    # The padding is set to 'SAME' which means the input image
+    # is padded with zeroes so the size of the output is the same.
+    layer = tf.nn.conv2d(input=input,
+    	             filter=weights,
+    	             strides=[1, 1, 1, 1],
+    	             padding='SAME')
+
+    # Add the biases to the results of the convolution.
+    # A bias-value is added to each filter-channel.
+    layer += biases
+
+    # Use pooling to down-sample the image resolution?
+    if use_pooling:
+        # This is 2x2 max-pooling, which means that we
+        # consider 2x2 windows and select the largest value
+        # in each window. Then we move 2 pixels to the next window.
+        layer = tf.nn.max_pool(value=layer,
+                               ksize=[1, 2, 2, 1],
+                               strides=[1, 2, 2, 1],
+                               padding='SAME')
+
+    # Rectified Linear Unit (ReLU).
+    # It calculates max(x, 0) for each input pixel x.
+    # This adds some non-linearity to the formula and allows us
+    # to learn more complicated functions.
+    layer = tf.nn.relu(layer)
+
+    # Note that ReLU is normally executed before the pooling,
+    # but since relu(max_pool(x)) == max_pool(relu(x)) we can
+    # save 75% of the relu-operations by max-pooling first.
+
+    # We return both the resulting layer and the filter-weights
+    # because we will plot the weights later.
+    return layer, weights
+
+    
 
 def flatten_layer(layer):
-	layer_shape = layer.get_shape()
-	num_features = layer[1:4].num_elements()
-	layer = tf.reshape(layer,[-1,num_features])
-def fc_layer(input,num_outputs):
-	return tf.contrib.layers.fully_connected(input,num_output)
+    # Get the shape of the input layer.
+    layer_shape = layer.get_shape()
 
-X = tf.placeholder(tf.float32,shape=[None,witdh,height,channels],name = 'x')
-y_true = tf.placeholder(tf.float32,shape=[None,num_classes],name='y_true')
-# y_true_cls = tf.argmax(y_true,dimesion=1)
-y_true_cls = tf.argmax(y_true)
+    # The shape of the input layer is assumed to be:
+    # layer_shape == [num_images, img_height, img_width, num_channels]
 
-conv1 = convolution_layer(input = X , num_input_channels= channels,num_filters=num_conv1_filters,kernel_size=conv1_kernel_size,kernel_stride=conv1_stride,use_pool=True)
-# conv2 = convolution_layer(input = conv1,num_input_channels=num_conv1_filters,num_filters=num_conv2_filters ,kernel_size=conv2_kernel_size,kernel_stride=conv2_stride,use_pool=True)
-# conv3 = convolution_layer(conv2,num_conv2_filters,num_conv3_filters,conv3_kernel_size,conv3_stride,False)
-# conv4 = convolution_layer(conv3,num_conv3_filters,num_conv4_filters,conv4_kernel_size,conv4_stride,False)
-# conv5 = convolution_layer(conv4,num_conv4_filters,num_conv5_filters,conv5_kernel_size,conv5_stride,False)
+    # The number of features is: img_height * img_width * num_channels
+    # We can use a function from TensorFlow to calculate this.
+    num_features = layer_shape[1:4].num_elements()
 
-# conv5_fc = flatten_layer(conv5)
+    # Reshape the layer to [num_images, num_features].
+    # Note that we just set the size of the second dimension
+    # to num_features and the size of the first dimension to -1
+    # which means the size in that dimension is calculated
+    # so the total size of the tensor is unchanged from the reshaping.
+    layer_flat = tf.reshape(layer, [-1, num_features])
 
-# fc1 = tf.contrib.layers.fully_connected(conv5_fc,num_fully1_nodes)
-# fc2 = tf.contrib.layers.fully_connected(fc1,num_fully2_nodes)
+    # The shape of the flattened layer is now:
+    # [num_images, img_height * img_width * num_channels]
 
-# output = tf.contrib.layer.fully_connected(fc2,num_classes)
+    # Return both the flattened layer and the number of features.
+    return layer_flat, num_features
 
-# y_pred = tf.nn.softmax(output,name='y_pred')
-# y_pred_cls = tf.argmax(y_pred,dimesion=1)
 
-# init = tf.global_variables_initializer()
-# x_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=output,lables=y_true)
-# cost = tf.reduce_mean(x_entropy)
-# optimizer = tf.train.AdamOptimizer().minimize(cost)
-# correct_prediction = tf.equal(y_pred,y_true)
-# accuracy = tf.reduce_mean(tf.cast(correct_prediction,tf.float32))
+def new_fc_layer(input,          # The previous layer.
+             num_inputs,     # Num. inputs from prev. layer.
+             num_outputs,    # Num. outputs.
+             use_relu=True): # Use Rectified Linear Unit (ReLU)?
 
-# saver = tf.train.Saver()
-# batch_size = 50
-# with tf.Session as sess:
-# 	sess.run(init)
-# 	saver.restore('')
-# 	for i in range(3000):
-# 		x_batch,y_true_batch, _ ,cls_batch = dataset.train.next_batch(batch_size)
-# 		x_valid_batch, y_valid_batch,_,valid_cls_batch = data.valid.next_batch(batch_size)
-# 		feed_dict_tr = {x:x_batch,y_true:y_true_batch}
-# 		feed_dict_val = {x:x_valid_batch,y_true:y_true_batch}
+    # Create new weights and biases.
+    weights = new_weights(shape=[num_inputs, num_outputs])
+    biases = new_biases(length=num_outputs)
 
-# 		sess.run(optimizer,feed_dict=feed_dict_tr)
-# 		if i % int(data.train.num_examples/batch_size) == 0:
-# 			val_loss = sess.run(cost,feed_dict=feed_dict_val)
-# 			epoch = int(i/ int(data.train.num_examples/batch_size))
-# 			acc = sess.run(accuracy,feed_dict=feed_dict_tr)
-# 			val_acc = sess.run(accuracy,feed_dict=feed_dict_val)
-# 			msg = "Training epoch {0} ---- Training acc {1:>6.1%} ---- Validation acc {2:>6.1%} ---- Validation loss {3:3f}"
-# 			print(msg.format(epoch+1,acc,val_acc,val_loss))
-# 			saver.Saver(sess,MODEL_NAME)
+    # Calculate the layer as the matrix multiplication of
+    # the input and weights, and then add the bias-values.
+    layer = tf.matmul(input, weights) + biases
+
+    # Use ReLU?
+    if use_relu:
+        layer = tf.nn.relu(layer)
+
+    return layer
+
+session = tf.Session()
+x = tf.placeholder(tf.float32, shape=[None, img_size_flat], name='x')
+x_image = tf.reshape(x, [-1, img_size, img_size, num_channels])
+
+y_true = tf.placeholder(tf.float32, shape=[None, num_classes], name='y_true')
+y_true_cls = tf.argmax(y_true, dimension=1)
+
+
+
+layer_conv1, weights_conv1 = \
+new_conv_layer(input=x_image,
+               num_input_channels=num_channels,
+               filter_size=filter_size1,
+               num_filters=num_filters1,
+               use_pooling=True)
+#print("now layer2 input")
+#print(layer_conv1.get_shape())     
+layer_conv2, weights_conv2 = \
+new_conv_layer(input=layer_conv1,
+               num_input_channels=num_filters1,
+               filter_size=filter_size2,
+               num_filters=num_filters2,
+               use_pooling=True)
+#print("now layer3 input")
+#print(layer_conv2.get_shape())     
+               
+layer_conv3, weights_conv3 = \
+new_conv_layer(input=layer_conv2,
+               num_input_channels=num_filters2,
+               filter_size=filter_size3,
+               num_filters=num_filters3,
+               use_pooling=True)
+#print("now layer flatten input")
+#print(layer_conv3.get_shape())     
+          
+layer_flat, num_features = flatten_layer(layer_conv3)
+
+layer_fc1 = new_fc_layer(input=layer_flat,
+                     num_inputs=num_features,
+                     num_outputs=fc_size,
+                     use_relu=True)
+
+layer_fc2 = new_fc_layer(input=layer_fc1,
+                     num_inputs=fc_size,
+                     num_outputs=num_classes,
+                     use_relu=False)
+
+y_pred = tf.nn.softmax(layer_fc2,name='y_pred')
+
+y_pred_cls = tf.argmax(y_pred, dimension=1)
+cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=layer_fc2,
+                                                    labels=y_true)
+cost = tf.reduce_mean(cross_entropy)
+
+optimizer = tf.train.AdamOptimizer(learning_rate=1e-4).minimize(cost)
+correct_prediction = tf.equal(y_pred_cls, y_true_cls)
+accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+
+session.run(tf.global_variables_initializer()) # for newer versions
+#session.run(tf.initialize_all_variables()) # for older versions
+train_batch_size = batch_size
+
+### FOR TENSORBOARD TUTORIAL ONLY
+#writer= tf.summary.FileWriter('/tmp/tensorboard_tut')
+#writer.add_graph(session.graph)
+
+
+def print_progress(epoch, feed_dict_train, feed_dict_validate, val_loss):
+    # Calculate the accuracy on the training-set.
+    acc = session.run(accuracy, feed_dict=feed_dict_train)
+    val_acc = session.run(accuracy, feed_dict=feed_dict_validate)
+    msg = "Epoch {0} --- Training Accuracy: {1:>6.1%}, Validation Accuracy: {2:>6.1%}, Validation Loss: {3:.3f}"
+    print(msg.format(epoch + 1, acc, val_acc, val_loss))
+
+
+
+total_iterations = 0
+
+def optimize(num_iterations):
+    # Ensure we update the global variable rather than a local copy.
+    global total_iterations
+
+    best_val_loss = float("inf")
+
+    for i in range(total_iterations,
+                   total_iterations + num_iterations):
+
+        # Get a batch of training examples.
+        # x_batch now holds a batch of images and
+        # y_true_batch are the true labels for those images.
+        x_batch, y_true_batch, _, cls_batch = data.train.next_batch(train_batch_size)
+        x_valid_batch, y_valid_batch, _, valid_cls_batch = data.valid.next_batch(train_batch_size)
+       
+        # Convert shape from [num examples, rows, columns, depth]
+        # to [num examples, flattened image shape]
+        x_batch = x_batch.reshape(train_batch_size, img_size_flat)
+        x_valid_batch = x_valid_batch.reshape(train_batch_size, img_size_flat)
+        # Put the batch into a dict with the proper names
+        # for placeholder variables in the TensorFlow graph.
+        feed_dict_train = {x: x_batch,
+                           y_true: y_true_batch}
+        
+        feed_dict_validate = {x: x_valid_batch,
+                              y_true: y_valid_batch}
+
+        # Run the optimizer using this batch of training data.
+        # TensorFlow assigns the variables in feed_dict_train
+        # to the placeholder variables and then runs the optimizer.
+        session.run(optimizer, feed_dict=feed_dict_train)
+	saver = tf.train.Saver()
+        saver.save(session, MODEL_NAME) 
+
+        # Print status at end of each epoch (defined as full pass through training dataset).
+        if i % int(data.train.num_examples/batch_size) == 0: 
+            val_loss = session.run(cost, feed_dict=feed_dict_validate)
+            epoch = int(i / int(data.train.num_examples/batch_size))
+            
+            print_progress(epoch, feed_dict_train, feed_dict_validate, val_loss)
+            
+
+    # Update the total number of iterations performed.
+    total_iterations += num_iterations
+
+    
+optimize(num_iterations=NUM_ITERATIONS)
+#print_validation_accuracy()
