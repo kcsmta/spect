@@ -5,61 +5,45 @@ import cv2
 from sklearn.utils import shuffle
 
 def load_train(train_path, image_size, classes):
-    images = []
-    labels = []
-    ids = []
-    cls = []
-    print('Reading training images')
-    for fld in classes:   # assuming data directory has a separate folder for each class, and that each folder is named after the class
+    images = [] # list all image Data
+    labels = [] # list all label of data - each label is a one-hot vector like (0,1,0,0,0) -> belongs to second class
+    ids = [] # list all id of image, actually is image file name
+    cls = [] # list all class like '1point', '2point'
+
+    print('Reading training data')
+    # assuming data directory has a separate folder for each class, and that each folder is named after the class
+    # like description in README.md
+    for fld in classes:   
         index = classes.index(fld)
-        print('----------------------------------')
+        print('-----------------------------------------------')
         print('Loading {} files (Index: {})'.format(fld, index))
         path = os.path.join(train_path, fld, '*.jpg')
         files = glob.glob(path)
         for fl in files:
+            # get image data
             image = cv2.imread(fl)
             print fl
             image = cv2.resize(image, (image_size, image_size), cv2.INTER_LINEAR)
             images.append(image)
+
+            # get label of file
             label = np.zeros(len(classes))
             label[index] = 1.0
             labels.append(label)
+            
+            # get id of file
             flbase = os.path.basename(fl)
             ids.append(flbase)
+            
+            # get class of file
             cls.append(fld)
+
     images = np.array(images)
     labels = np.array(labels)
     ids = np.array(ids)
     cls = np.array(cls)
 
     return images, labels, ids, cls
-
-
-def load_test(test_path, image_size,classes):
-  
-    for class_name in classes:
-        path = os.path.join(test_path,class_name, '*.jpg')
-        files = sorted(glob.glob(path))
-
-        X_test = []
-        X_test_id = []
-        print("Reading test images")
-        for fl in files:
-            flbase = os.path.basename(fl)
-            print(fl)
-            img = cv2.imread(fl)
-            img = cv2.resize(img, (image_size, image_size), cv2.INTER_LINEAR)
-            X_test.append(img)
-            X_test_id.append(flbase)
-
-  ### because we're not creating a DataSet object for the test images, normalization happens here
-        X_test = np.array(X_test, dtype=np.uint8)
-        X_test = X_test.astype('float32')
-        X_test = X_test / 255
-
-    return X_test, X_test_id
-
-
 
 class DataSet(object):
 
@@ -72,8 +56,8 @@ class DataSet(object):
         self._labels = labels
         self._ids = ids
         self._cls = cls
-        self._epochs_completed = 0
-        self._index_in_epoch = 0
+        self._epochs_completed = 0 # number of epoch
+        self._index_in_epoch = 0 #index in epoch, depend on batch size
 
     @property
     def images(self):
@@ -99,6 +83,7 @@ class DataSet(object):
     def epochs_completed(self):
         return self._epochs_completed
 
+    # method return a batch data from training data
     def next_batch(self, batch_size):
         """Return the next `batch_size` examples from this data set."""
         start = self._index_in_epoch

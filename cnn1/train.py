@@ -8,21 +8,12 @@ from datetime import timedelta
 import math
 import dataset
 import random
-    
-# Convolutional Layer 1.
-filter_size1 = 3 
-num_filters1 = 32
+####################################################################################
+# STEP 0: 
 
-# Convolutional Layer 2.
-filter_size2 = 3
-num_filters2 = 32
-
-# Convolutional Layer 3.
-filter_size3 = 3
-num_filters3 = 64
-    
-# Fully-connected layer.
-fc_size = 128             # Number of neurons in fully-connected layer.
+# path to image
+train_path='/home/kcsmta/Desktop/WORKS/SPECT/code/data/data_training'
+test_path='/home/kcsmta/Desktop/WORKS/SPECT/code/data/data_testing'
 
 # Number of color channels for the images: 1 channel for gray-scale.
 num_channels = 3
@@ -36,41 +27,21 @@ img_size_flat = img_size * img_size * num_channels
 # Tuple with height and width of images used to reshape arrays.
 img_shape = (img_size, img_size)
 
-# class info
+# where to save model after train pharse?
+MODEL_NAME = 'spect-image-model' # model name
 
+# class info include name of classes and number of classes
 classes = ['0', '1', '2', '3', '4']
 num_classes = len(classes)
 
-# batch size
-batch_size = 16
-
-# validation split
-validation_size = .2
-
-# number if iterations
-NUM_ITERATIONS = 3000
-
-# model name
-MODEL_NAME = 'spect-image-model'
-
-train_path='/home/kcsmta/Desktop/WORKS/SPECT/code/data/data_training'
-test_path='/home/kcsmta/Desktop/WORKS/SPECT/code/data/data_testing'
-
-
-data = dataset.read_train_sets(train_path, img_size, classes, validation_size=validation_size)
-
-print("Size of:")
-print("- Training-set:\t\t{}".format(len(data.train.labels)))
-print("- Validation-set:\t{}".format(len(data.valid.labels)))
-
+####################################################################################
+# STEP 1: utilities support to construct network layer
 
 def new_weights(shape):
     return tf.Variable(tf.truncated_normal(shape, stddev=0.05))
 
 def new_biases(length):
     return tf.Variable(tf.constant(0.05, shape=[length]))
-
-
 
 def new_conv_layer(input,              # The previous layer.
                num_input_channels, # Num. channels in prev. layer.
@@ -130,8 +101,6 @@ def new_conv_layer(input,              # The previous layer.
     # because we will plot the weights later.
     return layer, weights
 
-    
-
 def flatten_layer(layer):
     # Get the shape of the input layer.
     layer_shape = layer.get_shape()
@@ -175,6 +144,45 @@ def new_fc_layer(input,          # The previous layer.
         layer = tf.nn.relu(layer)
 
     return layer
+
+####################################################################################
+# STEP 2: parametter involve struction of network
+    
+# Convolutional Layer 1.
+filter_size1 = 3 
+num_filters1 = 32
+
+# Convolutional Layer 2.
+filter_size2 = 3
+num_filters2 = 32
+
+# Convolutional Layer 3.
+filter_size3 = 3
+num_filters3 = 64
+    
+# Fully-connected layer.
+fc_size = 128             # Number of neurons in fully-connected layer.
+
+# batch size
+batch_size = 16
+
+# validation split
+validation_size = .2
+
+# number if iterations
+NUM_ITERATIONS = 3000
+
+####################################################################################
+# STEP 3: Load data
+
+data = dataset.read_train_sets(train_path, img_size, classes, validation_size=validation_size)
+
+print("Size of:")
+print("- Training-set:\t\t{}".format(len(data.train.labels)))
+print("- Validation-set:\t{}".format(len(data.valid.labels)))
+
+####################################################################################
+# STEP 4: Struction of network layer in detail
 
 session = tf.Session()
 x = tf.placeholder(tf.float32, shape=[None, img_size_flat], name='x')
@@ -243,18 +251,35 @@ train_batch_size = batch_size
 #writer= tf.summary.FileWriter('/tmp/tensorboard_tut')
 #writer.add_graph(session.graph)
 
-
+####################################################################################
+# STEP 4: Show training progress
+epoch_list = []
+acc_list = []
+val_acc_list = []
+frequecy_save_plot = 5
 def print_progress(epoch, feed_dict_train, feed_dict_validate, val_loss):
     # Calculate the accuracy on the training-set.
     acc = session.run(accuracy, feed_dict=feed_dict_train)
     val_acc = session.run(accuracy, feed_dict=feed_dict_validate)
     msg = "Epoch {0} --- Training Accuracy: {1:>6.1%}, Validation Accuracy: {2:>6.1%}, Validation Loss: {3:.3f}"
     print(msg.format(epoch + 1, acc, val_acc, val_loss))
-
-
+    epoch_list.append(epoch+1)
+    acc_list.append(acc)
+    val_acc_list.append(val_acc)
+    if not (epoch+1)%frequecy_save_plot:
+        plt.plot(epoch_list, acc_list, 'r')
+        plt.plot(epoch_list, val_acc_list, 'b')
+        plt.title('model validation')
+        plt.ylabel('accuracy')
+        plt.xlabel('epoch')
+        plt.legend(['train', 'validation'], loc='upper left')
+        # plt.show()
+        plt.savefig('./plot/'+'epoch_'+str(epoch+1)+'.png')
 
 total_iterations = 0
 
+####################################################################################
+# STEP 5: configure optimizer
 def optimize(num_iterations):
     # Ensure we update the global variable rather than a local copy.
     global total_iterations
@@ -300,6 +325,7 @@ def optimize(num_iterations):
     # Update the total number of iterations performed.
     total_iterations += num_iterations
 
-    
+####################################################################################
+# STEP 6: Run model   
 optimize(num_iterations=NUM_ITERATIONS)
 #print_validation_accuracy()
